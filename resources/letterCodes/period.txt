@@ -1,0 +1,3 @@
+tgtList.add(new target(144, 58, 0, 0 + wd, 0 + ht + 10));
+tgtList.add(new target(58, 144, 219, 1 + wd, 0 + ht + 10));
+wd += 2;

@@ -1,0 +1,691 @@
+<!doctype html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<!--Developer : Mark Hiner (hiner@wisc.edu)-->
+<!--All code (c)2011 Mark Hiner, all rights reserved-->
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en"> 
+	<head>
+	<meta charset=UTF-8>
+	<title>Pierced Veil Projects</title>
+	<script type="text/javascript" src="js/linked_list.js"></script>
+    <script type="text/javascript" src="js/list_node.js"></script>
+    <script type="text/javascript" src="js/particle.js"></script>
+    <script type="text/javascript" src="js/target.js"></script>
+    <script type="text/javascript" src="js/letterGen.js"></script>
+    <script type="text/javascript" src="js/jquery-1.2.6.js"></script>
+    <script language="javascript" type="text/javascript">
+	
+    function addLoadEvent(func)
+    {    
+        var oldonload = window.onload;
+        if (typeof window.onload != 'function')
+        { 
+            window.onload = func;
+        } 
+        else 
+        {
+            window.onload = function()
+            {
+                oldonload();
+                func();
+            }
+        }
+    }
+        
+    addLoadEvent(init);
+    
+    var HEIGHT = 600;
+    var WIDTH = 700;
+    var NUMPARTS = 45000;
+    var LINEMARGIN = 50; // text margin from canvas
+    var XMARGIN = 75;
+    var YMARGIN = 75;
+    var SWIDTH = 30; // width in particles of the swarm
+    var element;
+    var hiddenCanvas;
+    var c;
+    var swList = new linkedList(); // holds swarm individuals
+    var tgtList = new linkedList(); // Holds targets for swarm individuals
+    var linkSwarm = new linkedList(); // holds the particles currently involved in hyperlinks
+    var INTERVAL = 55;  // how often, in milliseconds, we check to see if a redraw is needed
+    var canvasValid;
+    var targets;
+    var root;
+    var followParent;
+    var SPEED = 10; // scales the number of pixels moved per frame
+    var frameCount;
+    var delay; // delay after dispersing a swarm for it to reform
+    var DELAYVAL = 1;
+    var ready; // indicates if delay has passed or not
+    var MAXFRAME = 200; // number of frames to elapse before changing direction
+    var linkActive = false;
+    var beginLink = false;
+    var curLinkAddr = "";
+    var tmpHt = YMARGIN;
+    var tmpWd = XMARGIN;
+    
+    var myImage = new Image();
+    myImage.src = "resources/mark.png";
+    
+    function init()
+    {
+        element = document.getElementById("canvas");
+        c = element.getContext("2d");
+        
+        // read the width and height of the canvas
+        width = parseInt(element.getAttribute("width"));
+        height = parseInt(element.getAttribute("height"));
+
+        // create a new pixel array
+        imageData = c.createImageData(width, height);
+        setInterval('draw()', INTERVAL);
+        canvasValid = false;
+        followParent = true;
+        ready = true;
+        
+        frameCount = 0;
+        
+        for(var i = 0; i < NUMPARTS; i++) {
+            var a = nextAngle();
+            swList.add(new particle(0, 0, 0, (Math.random() * WIDTH), Math.random() * HEIGHT, a[0], a[1]));
+        }
+
+        root = swList.head.data;
+        
+        var curNode = swList.head.next;
+        var tmpList = new linkedList();
+        
+        for(var i = 1; i < swList.length; i++) {
+            if(i <= SWIDTH) {
+                root.children.add(curNode.data);
+                curNode.data.parent = root;
+            }
+            else {
+                tmpList.head.data.children.add(curNode.data);
+                curNode.data.parent = tmpList.head.data;
+            }
+            
+            tmpList.add(curNode.data);
+            
+            if(tmpList.length > SWIDTH) {
+                tmpList.removeInd(0);
+            }
+            
+            curNode = curNode.next;
+        }
+
+        element.addEventListener('click', on_canvas_click, false);        
+        goScreen(0);
+        /*
+        for(var i = 1; i <= SWIDTH; i++) {
+            var child = swList.at(i).data;
+            root.children.add(child);
+            child.parent = root;
+        }
+        
+        for(var i = SWIDTH + 1; i < swList.length; i++) {
+            var parent = swList.at(i - SWIDTH).data;
+            var child = swList.at(i).data;
+            parent.children.add(child);
+            child.parent = parent;
+        }
+        */
+    }
+    
+function on_canvas_click(event) {
+    var canvas = document.getElementById("canvas");
+    var   x = event.clientX + document.body.scrollLeft +
+              document.documentElement.scrollLeft;
+    var    y = event.clientY + document.body.scrollTop +
+              document.documentElement.scrollTop;
+
+    var offset = $("#canvas").position();
+    x -= offset.left;
+    y -= offset.top;
+    
+    var curNode = linkSwarm.head;
+    
+    var found = false;
+    for(var i = 0; i < linkSwarm.length && found === false; i++) {
+        var curTarget = curNode.data;
+        
+        if(Math.abs(curTarget.x - x) < 4 && Math.abs(curTarget.y - y) < 4) {
+           window.open(curTarget.address);
+          found = true;  
+        } 
+        
+        curNode = curNode.next;
+    }
+}    
+    
+    function nextAngle() {
+        
+        var angle = (Math.random() * 360);
+        var xStep = 0.0;
+        var yStep = 0.0;
+        var x = 1.0;
+        var y = 0.0;
+        var slope = Math.abs(Math.tan(degToRad(angle)));
+        
+        
+        if(0.0 < angle && angle < 90.0) {
+            y = x * slope;
+            xStep = x / (x + y);
+            yStep = -y / (x + y);
+        }
+        else if(90.0 < angle && angle < 180.0) {
+            y = x * slope;
+            xStep = x / (x + y);
+            yStep = y / (x + y);
+        }
+        else if(180.0 < angle && angle < 270.0) {
+            y = x * slope;
+            xStep = -x / (x + y);
+            yStep = y / (x + y);
+        }
+        else if(270.0 < angle && angle < 360.0) {
+            y = x * slope;
+            xStep = -x / (x + y);
+            yStep = -y / (x + y);
+        }
+        else if(angle == 90) {
+            xStep = 1;
+            yStep = 0;
+        }
+        else if(angle == 180) {
+            xStep = 0;
+            yStep = 1;
+        }
+        else if(angle == 270) {
+            xStep = -1;
+            yStep = 0;
+        }
+        else if (angle == 0 || angle == 360) {
+            xStep = 0;
+            yStep = -1;
+        }
+        
+        return [xStep, yStep];
+        
+    }
+    
+    function degToRad(d) {
+        return ((Math.PI / 180) * d);
+    }
+    
+    function distance(x1, y1, x2, y2) {
+        return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+    }
+    
+    function move(particle) {
+        var nextx = particle.x + (SPEED * particle.xstep);
+        var nexty = particle.y + (SPEED * particle.ystep);
+        var found = false;
+        
+        if(followParent === false && ready === true) {
+            if(distance(particle.x, particle.y, particle.target.x, particle.target.y) <= (SPEED * particle.xstep) + (SPEED * particle.ystep) + 5) {
+                particle.x = particle.target.x;
+                particle.y = particle.target.y
+                particle.xstep = 0;
+                particle.ystep = 0;
+                particle.r = particle.target.r;
+                particle.b = particle.target.b;
+                particle.g = particle.target.g;
+                found = true;
+            }
+        }
+        else if(followParent === true && ready === false) {
+            particle.r = 0;
+            particle.g = 0;
+            particle.b = 0;
+        }
+        
+        if(found === false) {
+        
+            if(nextx < 0 || nextx > WIDTH) {
+                particle.xstep = -particle.xstep;
+                nextx = particle.x + particle.xstep;
+            }
+        
+            if(nexty < 0 || nexty > HEIGHT) {
+                particle.ystep = -particle.ystep;
+                nexty = particle.y + particle.ystep;
+            }
+        
+            particle.x = nextx;
+            particle.y = nexty;
+        }
+    }
+    
+    function setPixel(imageData, x, y, r, g, b, a) {
+        index = (x + y * imageData.width) * 4;
+        imageData.data[index+0] = r;
+        imageData.data[index+1] = g;
+        imageData.data[index+2] = b;
+        imageData.data[index+3] = a;
+    }
+    
+    function parseImage(im, width, height, iWd, iHt) {
+        var hiddenCtx = document.getElementById('letterCanvas').getContext('2d');
+        hiddenCtx.drawImage(im, 0, 0);
+        var data = hiddenCtx.getImageData(0,0,iWd,iHt);
+        var dAry = data.data;
+        var k = height + (11 - iHt);
+        var l = width;
+        for(var h = 0; h < iWd; h++) { // column h
+            for(var g = 0; g < iHt; g++) { // row g
+                var base = (g * data.width * 4) + (h*4);
+                if(dAry[base] != 255 || dAry[base + 1] != 255 || dAry[base + 2] != 255) {
+                    tgtList.add(new target(dAry[base], dAry[base + 1], dAry[base + 2], h + width, g + height));
+                }
+            }
+        }
+    }
+    
+    function assignTargets() {
+        
+        var startInd = parseInt(Math.random() * (swList.length - 1));
+        var endInd;
+        
+        if(startInd + tgtList.length > swList.length) {
+            endInd = tgtList.length - (swList.length - startInd) - 1;
+        }
+        else {
+            endInd = startInd + tgtList.length - 1;
+        }
+
+        var aht = HEIGHT - (YMARGIN);
+        var awt = WIDTH - (XMARGIN);
+        
+        var curNode = swList.head;
+        
+        for(var i = 0; i < swList.length; i++) {
+            
+            var myParticle = curNode.data;
+            var found = false;
+            
+            if(endInd < startInd) {
+                if((i <= endInd && i <= startInd) || (i >= startInd)) {
+                    found = true;
+                }
+            }
+            else {
+                if(i >= startInd && i <= endInd) {
+                    found = true;
+                }
+            }
+            
+            if(found === true) {
+                var ind = parseInt(Math.random() * (tgtList.length - 1));
+                var myTarget = tgtList.removeInd(0).data;
+                myParticle.target = myTarget;            
+            }
+            
+            else{
+            var flip = Math.random();
+            if(flip > 0.75) {
+                // top
+                myParticle.target = new target(0,0,0,(Math.random() * (WIDTH - 2 * LINEMARGIN)) + LINEMARGIN, LINEMARGIN);
+            }
+            else if(flip > 0.5) {
+                // bottom
+                myParticle.target = new target(0,0,0,(Math.random() * (WIDTH - 2 * LINEMARGIN)) + LINEMARGIN, HEIGHT - LINEMARGIN);
+            }
+            else if(flip > 0.25) {
+                // left
+                myParticle.target = new target(0,0,0,LINEMARGIN,(Math.random() * (HEIGHT - 2 * LINEMARGIN)) + LINEMARGIN);
+            }
+            else {
+                // right
+                myParticle.target = new target(0,0,0,WIDTH - LINEMARGIN,(Math.random() * (HEIGHT - 2 * LINEMARGIN)) + LINEMARGIN);
+            }
+            }
+         
+            curNode = curNode.next;
+        }        
+    }
+    
+    function parse(s) {
+        //TODO take in codes and call multiple gen targets based on the text to print out
+        genTarget(s);
+    }
+    
+    function updateVector(particle) {
+
+        if(followParent === false) {
+            var a = cVector(particle, particle.target);
+            particle.xstep = a[0];
+            particle.ystep = a[1];
+        }
+        
+        //setPixel(imageData, parseInt(particle.x), parseInt(particle.y), 255, 255, 255, 0xff);
+        
+        move(particle);
+        
+        if(particle != root) {
+            /*
+            if(followParent === true) {
+                particle.r = particle.parent.r;
+                particle.g = particle.parent.g;
+                particle.b = particle.parent.b;
+            }
+            */
+            setPixel(imageData, parseInt(particle.x), parseInt(particle.y), particle.r, particle.g, particle.b, 0xff);
+        }
+        else if(followParent === false) {
+            setPixel(imageData, parseInt(particle.x), parseInt(particle.y), particle.r, particle.g, particle.b, 0xff);
+        }
+            
+        particle.updateColors();
+        
+        for(var i = 0; i < particle.children.length; i++) {
+            
+            var child = particle.children.at(i).data;
+            
+            if(followParent === true) {
+                if(particle.children.length === 1) {
+                    var wt = 0;
+                }
+                else {
+                    wt = ((Math.random() * 6 * SWIDTH) - (particle.children.length / 2)) * 3;
+                }
+            
+                var a = calcVector(particle, child, wt);
+            
+                child.xstep = a[0];
+                child.ystep = a[1];
+            }
+            updateVector(child);
+        }        
+    }
+    
+    function calcVector(parent, child, wt) {
+        var run = parent.x + ((Math.random() * 5 + wt) - ((5 + wt) / 2)) - child.x;
+        var rise = parent.y + ((Math.random() * 5 + wt) - ((5 + wt) / 2)) - child.y;
+        
+        if(run === 0 && rise === 0) {
+            return [0, 0];
+        }
+        else {
+            var xstep = run / (Math.abs(run) + Math.abs(rise));
+            var ystep = rise / (Math.abs(run) + Math.abs(rise));
+            return [xstep, ystep];
+        }
+    }
+    
+    function cVector(prtcl, tgt) {
+        var run = tgt.x - prtcl.x;
+        var rise = tgt.y - prtcl.y;
+        
+        if(run === 0 && rise === 0) {
+            return [0, 0];
+        }
+        else {
+            var xstep = run / (Math.abs(run) + Math.abs(rise));
+            var ystep = rise / (Math.abs(run) + Math.abs(rise));
+            return [xstep, ystep];
+        }
+    }    
+    
+    function clearTgt() {
+        tgtList = new linkedList();
+        linkSwarm = new linkedList();
+        followParent = true;
+        delay = DELAYVAL;
+        ready = false;
+    }
+    
+    function draw() {
+        
+        frameCount++;
+        
+        for(var i = 0; i < WIDTH; i++) {
+            for(var j = 0; j < HEIGHT; j++) {
+                setPixel(imageData, i, j, 230, 230, 230, 0xff);                
+            }
+        }
+        
+        // update random vectors
+        if(frameCount == MAXFRAME) {
+            frameCount = parseInt(Math.random() * (MAXFRAME - 1));
+            if(followParent === true) {
+                var a = nextAngle();
+                root.xstep = a[0];
+                root.ystep = a[1];
+            }
+            
+            /*
+            if(ready === false) {
+                for(var i = 0; i < swList.length; i++) {
+                    var prtcl = swList.at(i).data;
+                    var a = nextAngle();
+                    prtcl.xstep = a[0];
+                    prtcl.ystep = a[1];
+                }
+            }
+            */
+        }
+        
+        updateVector(root);
+
+        c.putImageData(imageData, 0, 0);
+        
+        if(ready === false) {
+            if(delay > 0) {
+                delay--;
+            }
+            else {
+                ready = true;       
+            }
+        }        
+    }
+    
+    function goScreen(num) {
+        tgtList = new linkedList();
+        linkSwarm = new linkedList();
+        tmpHt = YMARGIN;
+        tmpWd = XMARGIN;
+        followParent = false;
+        delay = DELAYVAL;
+        ready = false;
+        
+        switch(parseInt(num)) {
+            case 0:
+                parse("Welcome.$We are the PVP swarm. We exist to provide your content.$You may use the buttons at the top of the page to control us, or allow us to roam freely.$Thank you for visiting.");
+            break;
+            case 1:
+                parse("Pierced Veil Projects was founded to develop software projects that foster creativity and education. $$We believe providing users software containing rich customization and personalization options strengthens their interest and investment in the application. Similarly, the fields of artificial intelligence, machine learning, and human-computer interaction provide the tools for creating a dynamic environment to bring our applications to life. $$It is our hope that by using real-world scenarios as the background for our applications, users will naturally learn about the topics therein. $$PVP is a company of one, so I tend to draw on my own interests for subject material. If you have a project you feel is in line with my goals, please feel free to contact me.");
+            break;
+            case 2: 
+                parse("!$$$$$$I am currently a graduate student in computer science, with a background in chemistry. I have a love for all things biological, and that love has driven my interest in artificial intelligence and machine learning (which most of my projects incorporate). $$There is a special place in my heart for @http://en.wikipedia.org/wiki/Arthropods@arthropods. Fascination with their diversity and mechanisms was a major factor in my indepdentent developer aspirations - to emulate these creatures in the software realm. $$I believe these creatures don't receive nearly the attention they deserve. Thus, when designing my own projects, I usually look for ways to focus on one or more of their members (especially the parasites, who are unbelievably sophisticated and essentially rule the world). My goal is simply to raise awareness and pique interest in a topic that has me captivated. $$If you have any questions about PVP software, have a potential software project you'd like to discuss, or just want to talk about arthropods (and in some cases, cnidaria) please contact me at alpha*piercedveil.com");
+            break;
+            case 3: 
+                parse("@http://www.zayik.com@Zayik $A web interface for designing custom MIDI controllers. The site is managed by David Cross, who also runs @http://blog.60works.com@60works. Highly recommended for any DJ looking for a personal touch to their equipment. $$LiveAnt (coming soon) $An android LiveWallpaper application. It simulates an ant colony's struggle against parasitic flies and predatory lady bugs. Machine learning techniques allow the ants to adapt to their surroundings. A plethora of biological attributes are adjustable, allowing the user to experiment and observe the successes and failures of the simulation's inhabitants." +
+                "$$This page$Currently the swarm in this page is controlled by a fairly simple script. Ideally, learning algorithms will be added along with an enhanced capacity for interaction.");
+            break;
+        }
+        
+        assignTargets();
+    }
+    
+	</script>
+	
+	<style media=screen type=text/css>
+	canvas.letters {
+	    visibility: hidden;
+	    width: 12px;
+	    height: 12px;
+	}
+	
+    body 
+    { 
+        margin: 0; 
+        padding: 0; 
+        padding-top: 10px;
+        text-align: center; 
+        background: rgb(130,130,130);
+    } 
+    #centered
+    { 
+        width: 720px; /* set to desired width in px or percent */
+        height: 915px;
+        text-align: center; /* optionally you could use "justified" */
+        border: 0px; /* Changing this value will add lines around the centered area */
+        padding: 0;  
+        margin: 0 auto;
+    }
+    
+    table {
+        display: block;
+        margin: 0;
+        padding: 0;
+        -moz-box-shadow: 10px 10px 10px #000;
+        -webkit-box-shadow: 10px 10px 10px #000;
+        box-shadow: 0px 10px 10px 10px #000;        
+    }
+    
+    tr
+    {
+        margin: 0;
+        padding: 0;
+        border:none;
+        display: block;
+    }
+    
+    img.banner {
+        border-left-width: 10px;
+        border-right-width: 10px;
+        border-bottom-width:0px;
+        border-top-width:0px;
+        border-style: solid;
+        border-color:rgb(124,196,119);
+        margin-left: 0px;
+        padding-left: 0px;
+        display:block;        
+    }
+    
+    td.navCol {
+        border-left-width: 10px;
+        border-right-width: 10px;
+        border-bottom-width:0px;
+        border-top-width:0px;
+        border-style: solid;
+        border-color:rgb(124,196,119);
+        margin-left: 0px;
+        padding-left: 0px;
+        background-color:black;
+    }
+    
+    canvas.swarm {
+        border-left-width: 10px;
+        border-right-width: 10px;
+        border-bottom-width: 10px;
+        border-top-width:0px;
+        border-style: solid;
+        border-color:rgb(124,196,119);
+        margin-left: 0px;
+        padding-left: 0px;
+        display:block;
+    }
+	
+#nav-menu ul
+{
+list-style: none;
+padding: 0;
+margin: 0;
+width: 690px;
+border-width:5px;
+border-color:rgb(124,196,119);
+border-style:solid;
+}
+
+#nav-menu li
+{
+float: left;
+margin-left: 1.4em;
+margin-right: 1.4em;
+margin-bottom: 0.75em;
+}
+
+#nav-menu li button
+{
+background-image: url(resources/background.gif); bottom left background-repeat: repeat-x;
+height: 1.6em;
+line-height: 0.8em;
+float: left;
+width: 7.5em;
+border-top-width:0.5px;
+border-top-color:rgb(124,196,119);
+border-top-style:solid;
+border-bottom-width:0.2em;
+border-left-width:0.2em;
+border-right-width:0.2em;
+border-bottom-color:black;
+border-right-color:black;
+border-left-color:black;
+margin-top:4px;
+padding-bottom: 4px;
+color: #0d2474;
+text-decoration: none;
+text-align: center;
+border-bottom-left-radius: 7.5px;
+border-bottom-right-radius: 7.5px;
+font-family:"Helvetica";
+font-weight:bold;
+font-size:17px;
+color:rgb(0,0,50);
+-moz-box-shadow: 0px 3px 1px 1.5px #b44;
+-webkit-box-shadow: 0px 3px 1px 1.5px #b44;
+box-shadow: 0px 3px 1px 1.5px #b44;
+}
+
+#nav-menu li button:hover
+{
+    text-decoration: underline;
+    color: rgb(50,50,180);
+}
+/* Hide from IE5-Mac \*/
+#nav-menu li button
+{
+float: none
+}
+/* End hide */
+
+#nav-menu
+{
+width:700px;
+} 	
+	
+	</style>
+	
+    </head>
+
+    <body>
+        <table id="centered" cellspacing="0" cellpadding="0">
+            <tr>
+                <td class="navCol">
+                    <div id="nav-menu">
+                    <ul>
+                    <li><button onclick="goScreen('1')">ABOUT PVP</button></li>
+                    <li><button onclick="goScreen('2')">ABOUT ME</button></li>
+                    <li><button onclick="goScreen('3')">PROJECTS</button></li>
+                    <li><button onclick="clearTgt()">ROAM</button></li>
+                    </ul>
+                    </div> 
+                </td>
+            </tr>            
+            <tr>
+                <td >
+                    <!--Top Banner -->
+                    <img class="banner" src="resources/pvpbanner.png" alt="PVP Logo"/>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                   <!--Canvas -->
+                   <canvas class="swarm" id="canvas" width="700" height="600"></canvas>
+                   <canvas class="letters" id="letterCanvas"></canvas>
+                </td>
+            </tr>
+
+        </table>
+    </body>
+</html>
